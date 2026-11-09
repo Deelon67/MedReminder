@@ -53,24 +53,37 @@ class MainViewModel(
     }
 
     private fun addMedicine(medicine: Medicine) {
-        viewModelScope.launch {
+        viewModelScope.launch { saveMedicine(medicine) }
+    }
+
+    fun clearSaveError() { _state.update { it.copy(saveError = null) } }
+
+    suspend fun saveMedicine(medicine: Medicine): Boolean {
+        if (_state.value.isSaving) return false
+        if (medicine.name.isBlank() || medicine.dosage.isBlank() ||
+            medicine.times.isEmpty() || medicine.times.any { it !in 0..1439 } ||
+            medicine.weekdaysMask and 127 == 0 ||
+            (medicine.courseDays != null && medicine.courseDays <= 0)) {
+            _state.update { it.copy(saveError = "Проверьте название, дозировку и расписание.") }
+            return false
+        }
+        _state.update { it.copy(isSaving = true, saveError = null) }
+        try {
+            val id = repository.addMedicine(medicine)
             try {
-                // Получаем ID от базы данных
-                val generatedId = repository.addMedicine(medicine)
-
-                Log.d("MedReminder", "Лекарство добавлено с ID: $generatedId")
-
-                // Создаём новый объект Medicine с правильным ID
-                val medicineWithId = medicine.copy(id = generatedId.toInt())
-
-                // Планируем будильник с правильным ID
-                alarmScheduler.scheduleMedicineAlarm(medicineWithId)
-
-                Log.d("MedReminder", "Будильник запланирован на ${medicineWithId.hour}:${medicineWithId.minute}")
+                alarmScheduler.scheduleMedicineAlarm(medicine.copy(id = id.toInt()))
             } catch (e: Exception) {
-                Log.e("MedReminder", "Ошибка при добавлении: ${e.message}")
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = "Лекарство сохранено, но не удалось настроить напоминание.") }
+                Log.e("MedReminder", "Не удалось запланировать напоминание", e)
             }
+            return true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(saveError = "Не удалось сохранить лекарство. Попробуйте ещё раз.") }
+            return false
+        } finally {
+            _state.update { it.copy(isSaving = false) }
         }
     }
 

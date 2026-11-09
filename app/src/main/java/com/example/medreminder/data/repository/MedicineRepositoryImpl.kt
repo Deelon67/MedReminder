@@ -17,7 +17,13 @@ class MedicineRepositoryImpl(
         dosage = dosage,
         timeOfDay = timeOfDay,
         hour = hour,
-        minute = minute
+        minute = minute,
+        startEpochDay = startEpochDay,
+        courseDays = courseDays,
+        weekdaysMask = weekdaysMask,
+        times = times.split(",").mapNotNull { it.toIntOrNull() }.filter { it in 0..1439 }
+            .ifEmpty { listOf(hour * 60 + minute) },
+        comment = comment
     )
 
     private fun Medicine.toEntity() = MedicineEntity(
@@ -26,7 +32,12 @@ class MedicineRepositoryImpl(
         dosage = dosage,
         timeOfDay = timeOfDay,
         hour = hour,
-        minute = minute
+        minute = minute,
+        startEpochDay = startEpochDay,
+        courseDays = courseDays,
+        weekdaysMask = weekdaysMask,
+        times = times.distinct().sorted().joinToString(","),
+        comment = comment
     )
 
     override fun getAllMedicines(): Flow<List<Medicine>> {

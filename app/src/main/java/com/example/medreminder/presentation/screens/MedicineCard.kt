@@ -21,7 +21,10 @@ fun MedicineCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 4.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
@@ -45,12 +48,14 @@ fun MedicineCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // ВАЖНО: Вычисляем период на основе времени, а не берем из medicine.timeOfDay
-                val actualTimeOfDay = TimeUtils.getTimeOfDayFromHour(medicine.hour)
-                val timeString = String.format("%02d:%02d", medicine.hour, medicine.minute)
+                val timeString = medicine.times.distinct().sorted().joinToString(" · ") { formatDoseTime(it) }
 
+                if (medicine.comment.isNotBlank()) {
+                    Text(medicine.comment, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 Text(
-                    text = "${TimeUtils.formatTimeOfDay(actualTimeOfDay)}: $timeString",
+                    text = timeString,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )

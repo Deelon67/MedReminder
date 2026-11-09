@@ -19,7 +19,7 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             "medicines_database"
-        ).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
     }
 
     // Создаем DAO из базы данных

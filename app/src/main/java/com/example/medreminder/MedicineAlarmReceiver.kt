@@ -10,9 +10,14 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.example.medreminder.domain.repository.MedicineRepository
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import org.koin.core.component.get
+import java.time.LocalDate
 
 // Receiver получает сигнал от AlarmManager и показывает уведомление
-class MedicineAlarmReceiver : BroadcastReceiver() {
+class MedicineAlarmReceiver : BroadcastReceiver(), org.koin.core.component.KoinComponent {
 
     companion object {
         const val CHANNEL_ID = "medicine_reminder_channel"
@@ -23,13 +28,29 @@ class MedicineAlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d("MedicineReceiver", "Получен сигнал будильника!")
+        val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+        if (id <= 0) return
+        val pendingResult = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                withTimeout(8_000) {
+                    // Re-read Room: a deleted medicine must not produce a notification.
+                    val medicine = get<MedicineRepository>().getAllMedicines().first()
+                        .firstOrNull { it.id == id } ?: return@withTimeout
+                    if (medicine.isScheduledOn(LocalDate.now())) {
+                        showNotification(context, medicine.name, medicine.dosage, medicine.id)
+                    }
+                    MedicineAlarmScheduler(context).scheduleMedicineAlarm(medicine)
+                }
+            } catch (e: Exception) {
+                Log.e("MedicineReceiver", "Не удалось обработать напоминание", e)
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
 
-        val medicineName = intent.getStringExtra(EXTRA_MEDICINE_NAME) ?: return
-        val dosage = intent.getStringExtra(EXTRA_DOSAGE) ?: return
-        val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
-
-        Log.d("MedicineReceiver", "Показываем уведомление: $medicineName - $dosage (ID: $notificationId)")
+    private fun showNotification(context: Context, medicineName: String, dosage: String, notificationId: Int) {
 
         // Создаем канал уведомлений (нужен для Android 8.0+)
         createNotificationChannel(context)

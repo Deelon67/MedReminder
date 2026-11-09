@@ -19,9 +19,21 @@ class Converters {
 }
 
 // @Database говорит Room, что это база данных
-@Database(entities = [MedicineEntity::class], version = 1, exportSchema = false)
+@Database(entities = [MedicineEntity::class], version = 2, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
+    companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE medicines ADD COLUMN startEpochDay INTEGER")
+                db.execSQL("ALTER TABLE medicines ADD COLUMN courseDays INTEGER")
+                db.execSQL("ALTER TABLE medicines ADD COLUMN weekdaysMask INTEGER NOT NULL DEFAULT 127")
+                db.execSQL("ALTER TABLE medicines ADD COLUMN times TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE medicines ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
+            }
+        }
+    }
+
 
     // Абстрактный метод для получения DAO
     abstract fun medicineDao(): MedicineDao
