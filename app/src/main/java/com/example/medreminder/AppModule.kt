@@ -19,11 +19,13 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             "medicines_database"
-        ).addMigrations(AppDatabase.MIGRATION_1_2).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).build()
     }
 
     // Создаем DAO из базы данных
     single { get<AppDatabase>().medicineDao() }
+    single { get<AppDatabase>().doseRecordDao() }
+    single { DoseReminderManager(androidContext(), get(), get()) }
 
     // Создаем репозиторий
     single<MedicineRepository> { MedicineRepositoryImpl(get()) }
@@ -32,5 +34,5 @@ val appModule = module {
     single { GetMedicinesUseCase(get()) }
 
     // Создаем ViewModel (теперь с контекстом)
-    viewModel { MainViewModel(get(), get(), androidContext()) }
+    viewModel { MainViewModel(get(), get(), androidContext(), get(), get()) }
 }

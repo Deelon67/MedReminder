@@ -15,6 +15,21 @@ class MedicineScheduleTest {
     private val zone = ZoneId.of("Europe/Astrakhan")
     private fun at(date: LocalDate, hour: Int) = date.atTime(hour, 0).atZone(zone)
 
+    @Test fun cabinetPreparationNeverCreatesDoses() {
+        val preparation = medicine.copy(cabinetOnly = true)
+        assertFalse(preparation.isScheduledOn(start))
+        assertFalse(preparation.isScheduledOn(start.plusDays(1)))
+        assertNull(preparation.nextDoseAfter(at(start, 7)))
+    }
+
+    @Test fun hidingOneDateKeepsOtherDaysAndSkipsItsAlarms() {
+        val hidden = medicine.copy(hiddenDates = setOf(start.toEpochDay()))
+        assertFalse(hidden.isScheduledOn(start))
+        assertTrue(hidden.isScheduledOn(start.plusDays(1)))
+        assertEquals(at(start.plusDays(1), 8), hidden.nextDoseAfter(at(start, 7)))
+        assertEquals(medicine.id, hidden.id)
+    }
+
     @Test fun courseIncludesStartAndLastDayOnly() {
         assertFalse(medicine.isScheduledOn(start.minusDays(1)))
         assertTrue(medicine.isScheduledOn(start))

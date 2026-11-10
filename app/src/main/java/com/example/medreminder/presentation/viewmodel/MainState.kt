@@ -8,5 +8,7 @@ data class MainState(
     val isLoading: Boolean = false, // Загрузка
     val error: String? = null, // Ошибка
     val isSaving: Boolean = false,
-    val saveError: String? = null
+    val saveError: String? = null,
+    val doses: List<com.example.medreminder.data.db.DoseRecord> = emptyList(),
+    val updatingDoses: Set<String> = emptySet()
 )

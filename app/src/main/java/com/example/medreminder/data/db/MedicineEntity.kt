@@ -27,5 +27,15 @@ data class MedicineEntity(
     @androidx.room.ColumnInfo(defaultValue = "''")
     val times: String = "",
     @androidx.room.ColumnInfo(defaultValue = "''")
-    val comment: String = ""
+    val comment: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "''")
+    val hiddenDates: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val cabinetOnly: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "''")
+    val form: String = "",
+    @androidx.room.ColumnInfo(defaultValue = "''")
+    val quantity: String = "",
+    val expiryEpochDay: Long? = null,
+    val preparationId: Int? = null
 )

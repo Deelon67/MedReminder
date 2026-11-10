@@ -39,13 +39,22 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
+fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit, onAddPreparationClick: () -> Unit, onAddSchedule: (Int) -> Unit, onOpenPreparation: (Int) -> Unit) {
     val state by viewModel.state.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var chosenDate by rememberSaveable { mutableStateOf<Long?>(null) }
     var search by rememberSaveable { mutableStateOf("") }
+    val onAddClick = if (tab == 1) onAddPreparationClick else onAddMedicineClick
+    val cabinet = com.example.medreminder.domain.model.cabinetMedicines(state.medicines)
     val today = rememberPhoneDate()
     val selected = chosenDate?.let(LocalDate::ofEpochDay) ?: today
+    val query = search.trim()
+    val medicines = (if (tab == 1) cabinet else state.medicines)
+        .filter { medicine ->
+            if (tab == 0) medicine.isScheduledOn(selected)
+            else query.isEmpty() || medicine.name.contains(query, ignoreCase = true)
+        }
+        .sortedWith(compareBy({ it.hour }, { it.minute }, { it.name }))
     val context = LocalContext.current
     val openCalendar = {
         DatePickerDialog(context, { _, year, month, day ->
@@ -68,7 +77,7 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
             floatingActionButton = {
                 if (tab == 0 || tab == 1) {
                     FloatingActionButton(
-                        onClick = onAddMedicineClick,
+                        onClick = onAddClick,
                         containerColor = Accent,
                         contentColor = DashboardColors.onPrimary,
                         shape = CircleShape,
@@ -84,7 +93,7 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
                                 .border(1.dp, DashboardColors.onPrimary.copy(alpha = .2f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, "Добавить лекарство", Modifier.size(34.dp))
+                            Icon(Icons.Default.Add, if (tab == 1) "Добавить препарат" else "Добавить приём", Modifier.size(34.dp))
                         }
                     }
                 }
@@ -122,7 +131,7 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
                             )
                             Spacer(Modifier.height(12.dp))
                             Surface(color = SoftAccent, shape = RoundedCornerShape(12.dp)) {
-                                Text("Все · ${state.medicines.size}", color = Accent, modifier = Modifier.padding(12.dp))
+                                Text(if (query.isEmpty()) "Все · ${cabinet.size}" else "Найдено · ${medicines.size}", color = Accent, modifier = Modifier.padding(12.dp))
                             }
                         }
                     }
@@ -133,28 +142,31 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
                         item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                     } else if (state.medicines.isEmpty()) {
                         item {
-                            EmptyMedicines(tab == 1, onAddMedicineClick)
+                            EmptyMedicines(tab == 1, onAddClick)
                         }
                     } else {
-                        val medicines = state.medicines
-                            .filter { if (tab == 0) it.isScheduledOn(selected) else it.name.contains(search.trim(), ignoreCase = true) }
-                            .sortedWith(compareBy({ it.hour }, { it.minute }, { it.name }))
                         if (medicines.isEmpty()) {
-                            item { Text(if (tab == 0) "На выбранный день приёмов нет" else "Лекарства не найдены", color = Muted, modifier = Modifier.padding(vertical = 24.dp)) }
+                            item {
+                                if (tab == 0) EmptyMedicines(false, onAddMedicineClick)
+                                else Text("Лекарства не найдены", color = Muted, modifier = Modifier.padding(vertical = 24.dp))
+                            }
                         }
                         items(medicines, key = { it.id }) { medicine ->
                             if (tab == 0) {
-                                MedicineCard(medicine) { viewModel.processIntent(MainIntent.DeleteMedicine(medicine)) }
+                                TodayDoseCard(medicine, selected, state, viewModel) {
+                                    viewModel.processIntent(MainIntent.HideMedicineOnDate(medicine, selected.toEpochDay()))
+                                }
                             } else {
-                                DashboardPanel(Modifier.fillMaxWidth()) {
-                                    Text(medicine.name, fontWeight = FontWeight.Bold, color = Ink)
+                                CabinetMedicineCard(medicine, today, onAddSchedule = { onAddSchedule(medicine.id) },
+                                    onOpen = { onOpenPreparation(medicine.id) }) {
+                                    viewModel.processIntent(MainIntent.DeleteMedicine(medicine))
                                 }
                             }
                         }
                     }
                 }
                 2 -> DiaryScreen(Modifier.padding(padding), today)
-                3 -> ProfileScreen(Modifier.padding(padding), state.medicines.size)
+                3 -> ProfileScreen(Modifier.padding(padding), cabinet.size, viewModel::updateReminderSettings)
             }
         }
     }

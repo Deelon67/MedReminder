@@ -16,9 +16,16 @@ data class Medicine(
     val courseDays: Int? = null,
     val weekdaysMask: Int = 127,
     val times: List<Int> = listOf(hour * 60 + minute),
-    val comment: String = ""
+    val comment: String = "",
+    val hiddenDates: Set<Long> = emptySet(),
+    val cabinetOnly: Boolean = false,
+    val form: String = "",
+    val quantity: String = "",
+    val expiryEpochDay: Long? = null,
+    val preparationId: Int? = null
 ) {
     fun isScheduledOn(date: LocalDate): Boolean {
+        if (cabinetOnly || date.toEpochDay() in hiddenDates) return false
         val start = startEpochDay
         if (start != null) {
             if (date.toEpochDay() < start) return false
@@ -29,8 +36,8 @@ data class Medicine(
 
     fun nextDoseAfter(now: ZonedDateTime): ZonedDateTime? {
         val first = maxOf(now.toLocalDate().toEpochDay(), startEpochDay ?: Long.MIN_VALUE)
-        // Any selected weekday must occur within the next 7 days.
-        for (offset in 0L..7L) {
+        // Allow an extra week for each explicitly hidden date.
+        for (offset in 0L..(7L * (hiddenDates.size.toLong() + 1))) {
             val date = LocalDate.ofEpochDay(first + offset)
             if (!isScheduledOn(date)) continue
             for (minutes in times.distinct().sorted()) {

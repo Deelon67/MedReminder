@@ -60,7 +60,7 @@ internal fun DiaryScreen(modifier: Modifier, today: LocalDate) {
 }
 
 @Composable
-internal fun ProfileScreen(modifier: Modifier, medicineCount: Int) {
+internal fun ProfileScreen(modifier: Modifier, medicineCount: Int, onRepeatSettingsChange: (Boolean, Int) -> Unit) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         ScreenTitle("Профиль")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -96,11 +96,7 @@ internal fun ProfileScreen(modifier: Modifier, medicineCount: Int) {
             ProfileRow("Следующее напоминание: —", "Последнее срабатывание: —")
         }
         SectionCaption("НАПОМИНАНИЯ")
-        DashboardPanel {
-            StaticToggle("Настойчивые напоминания", "для новых лекарств: повтор каждые 10 мин", true)
-            PanelDivider()
-            StaticToggle("Тихие часы", "без звука 23:00 – 07:00", false)
-        }
+        ReminderSettingsCard(onRepeatSettingsChange)
         SectionCaption("РАСПОРЯДОК ДНЯ")
         DashboardPanel {
             listOf("Подъём" to "07:00", "Завтрак" to "08:00", "Обед" to "13:00", "Ужин" to "19:00", "Отход ко сну" to "23:00")

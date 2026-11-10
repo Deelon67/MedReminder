@@ -9,7 +9,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
@@ -17,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,22 +35,41 @@ import java.util.Locale
 @SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
+fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initialPreparationId: Int? = null) {
+    var preparationId by rememberSaveable { mutableStateOf(initialPreparationId) }
+    var addingPreparation by rememberSaveable { mutableStateOf(false) }
+    var focusedField by remember { mutableStateOf<String?>(null) }
+    var selectedSuggestion by rememberSaveable { mutableStateOf<String?>(null) }
     var name by rememberSaveable { mutableStateOf("") }
     var dosage by rememberSaveable { mutableStateOf("") }
+    var chosenDoseUnit by rememberSaveable { mutableStateOf<String?>(null) }
     var course by rememberSaveable { mutableStateOf("7") }
     var start by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
-    var weekdays by rememberSaveable { mutableIntStateOf(127) }
+    var weekdays by rememberSaveable { mutableIntStateOf(0) }
     var availableTimes by rememberSaveable { mutableStateOf(listOf(480, 720, 1080)) }
     var times by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var comment by rememberSaveable { mutableStateOf("") }
     var timeEditor by rememberSaveable { mutableStateOf<Int?>(null) }
     val state by viewModel.state.collectAsState()
+    val cabinet = com.example.medreminder.domain.model.cabinetMedicines(state.medicines)
+    val preparation = cabinet.firstOrNull { it.id == preparationId }
+        ?: cabinet.firstOrNull {
+            com.example.medreminder.domain.model.medicineNameKey(it.name) ==
+                com.example.medreminder.domain.model.medicineNameKey(name)
+        }
+    LaunchedEffect(initialPreparationId, cabinet.map { it.id }) {
+        if (name.isBlank()) cabinet.firstOrNull { it.id == initialPreparationId }?.let {
+            name = com.example.medreminder.domain.model.capitalizeMedicineName(it.name)
+            selectedSuggestion = name
+        }
+    }
+    val doseUnit = chosenDoseUnit ?: preparation?.form?.let(::scheduleDoseUnit).orEmpty()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val days = course.toIntOrNull()
-    val valid = name.isNotBlank() && dosage.isNotBlank() && days != null &&
-        days in 1..3650 && weekdays != 0 && times.isNotEmpty()
+    val valid = name.isNotBlank() && dosage.isNotBlank() && doseUnit.isNotBlank() &&
+        (dosage.toLongOrNull()?.let { it > 0 } == true) && days != null &&
+        days in 1..365 && weekdays != 0 && times.isNotEmpty()
     LaunchedEffect(Unit) { viewModel.clearSaveError() }
 
     MaterialTheme(colorScheme = DashboardColors) {
@@ -82,21 +101,107 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
                                     color = Muted)
                             }
                         }
-                        OutlinedTextField(name, { name = it }, label = { Text("Название") },
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
-                        OutlinedTextField(dosage, { dosage = it }, label = { Text("Дозировка") },
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
-                        OutlinedTextField(course, { if (it.length <= 4 && it.all(Char::isDigit)) course = it },
-                            label = { Text("Курс") }, supportingText = { Text("Дней лечения · от 1 до 3650") },
-                            isError = course.isNotEmpty() && (days == null || days !in 1..3650),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(7, 14, 30).forEach { count ->
-                                FilterChip(selected = days == count, onClick = { course = count.toString() },
-                                    label = { Text("$count дней") }, enabled = !state.isSaving,
-                                    leadingIcon = if (days == count) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null)
+                        OutlinedTextField(name, { name = com.example.medreminder.domain.model.capitalizeMedicineName(it); selectedSuggestion = null; preparationId = null; chosenDoseUnit = null }, label = { Text("Название препарата") },
+                            placeholder = { Text("Например, Парацетамол") },
+                            supportingText = if (focusedField == "name") {
+                                { Text("Введите хотя бы одну букву, чтобы найти препарат в аптечке, или укажите новое название.") }
+                            } else null,
+                            singleLine = true, modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                if (it.isFocused) focusedField = "name"
+                                else if (focusedField == "name") focusedField = null
+                            }, enabled = !state.isSaving)
+                        if (focusedField == "name" && name.isNotBlank() && selectedSuggestion != name &&
+                            cabinet.none {
+                                com.example.medreminder.domain.model.medicineNameKey(it.name) ==
+                                    com.example.medreminder.domain.model.medicineNameKey(name)
                             }
+                        ) {
+                            val query = com.example.medreminder.domain.model.medicineNameKey(name)
+                            val suggestions = com.example.medreminder.domain.model.cabinetMedicines(state.medicines)
+                                .filter { com.example.medreminder.domain.model.medicineNameKey(it.name).contains(query) }
+                            if (suggestions.isNotEmpty()) {
+                                Text("Из аптечки", modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelMedium, color = Muted)
+                                suggestions.forEach { medicine ->
+                                    TextButton(
+                                        onClick = {
+                                            name = com.example.medreminder.domain.model.capitalizeMedicineName(medicine.name)
+                                            selectedSuggestion = name
+                                            preparationId = medicine.id
+                                            chosenDoseUnit = null
+                                            dosage = ""
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                                        enabled = !state.isSaving
+                                    ) { Text(medicine.name, modifier = Modifier.fillMaxWidth()) }
+                                }
+                            } else {
+                                Text("В аптечке не найдено. Препарат добавится при сохранении схемы.",
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                    style = MaterialTheme.typography.bodySmall, color = Muted)
+                            }
+                        }
+                        preparation?.let { medicine ->
+                            Surface(color = SoftAccent, shape = RoundedCornerShape(16.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Препарат из аптечки", fontWeight = FontWeight.Bold)
+                                    if (medicine.form.isNotBlank()) Text("Форма: ${medicine.form}")
+                                    if (medicine.dosage.isNotBlank()) Text("На упаковке: ${medicine.dosage}")
+                                    Text(if (medicine.quantity.isBlank()) "Запас не указан" else "В запасе: ${medicine.quantity}")
+                                }
+                            }
+                        }
+                        if (preparation == null && name.isNotBlank()) {
+                            TextButton(
+                                onClick = { addingPreparation = true },
+                                enabled = !state.isSaving,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Text("Заполнить карточку препарата", modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                        OutlinedTextField(dosage, { value ->
+                            if (value.all { it in '0'..'9' }) dosage = value
+                        }, label = { Text("Количество на один приём") },
+                            suffix = { Text(doseUnit) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            placeholder = { Text("Например, 1") },
+                            supportingText = if (focusedField == "dosage") {
+                                { Text("Введите число и выберите единицу приёма ниже.") }
+                            } else null,
+                            singleLine = true, modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                if (it.isFocused) focusedField = "dosage"
+                                else if (focusedField == "dosage") focusedField = null
+                            }, enabled = !state.isSaving)
+                        Text("Единица приёма", fontWeight = FontWeight.Bold)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf("табл.", "капс.", "кап.", "мл", "мг", "г", "шт.", "впрыск.").forEach { unit ->
+                                SelectionChip(
+                                    text = when (unit) {
+                                        "капс." -> "капсулы"
+                                        "кап." -> "капли"
+                                        "впрыск." -> "впрыск"
+                                        else -> unit
+                                    },
+                                    selected = doseUnit == unit,
+                                    onClick = { chosenDoseUnit = unit },
+                                    enabled = !state.isSaving
+                                )
+                            }
+                        }
+                        Text("Курс", fontWeight = FontWeight.Bold)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("7" to "7 дней", "14" to "14 дней", "30" to "30 дней")
+                                .forEach { (option, label) ->
+                                    SelectionChip(label, course == option,
+                                        onClick = { course = option }, enabled = !state.isSaving)
+                                }
                         }
                         OutlinedButton(
                             onClick = {
@@ -115,41 +220,36 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
                             listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс").forEachIndexed { index, label ->
                                 val bit = 1 shl index
                                 val checked = weekdays and bit != 0
-                                FilterChip(selected = checked, onClick = { weekdays = weekdays xor bit },
-                                    enabled = !state.isSaving, label = { Text(label) },
-                                    leadingIcon = if (checked) { { Icon(Icons.Default.Check, null, Modifier.size(16.dp)) } } else null)
+                                SelectionChip(label, checked,
+                                    onClick = { weekdays = weekdays xor bit }, enabled = !state.isSaving)
                             }
                         }
                         if (weekdays == 0) Text("Выберите хотя бы один день.", color = MaterialTheme.colorScheme.error)
                         Text("Время приёма", fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { timeEditor = -1 }, enabled = !state.isSaving) { Text("Добавить") }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             availableTimes.sorted().forEach { time ->
                                 val selected = time in times
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = {
-                                        times = if (selected) times - time else (times + time).sorted()
-                                    },
-                                    enabled = !state.isSaving,
-                                    label = { Text(formatDoseTime(time)) },
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        selectedContainerColor = SoftAccent,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        selectedLeadingIconColor = Accent
-                                    ),
-                                    leadingIcon = if (selected) {
-                                        { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
-                                    } else null
-                                )
+                                SelectionChip(formatDoseTime(time), selected,
+                                    onClick = { times = if (selected) times - time else (times + time).sorted() },
+                                    enabled = !state.isSaving)
                             }
+                            SelectionChip("Своё", false, onClick = { timeEditor = -1 }, enabled = !state.isSaving)
                         }
-                        Text(if (times.isEmpty()) "Выберите хотя бы одно время." else "Нажмите на время, чтобы выбрать или отменить приём.",
+                        Text(if (times.isEmpty()) "Выберите время." else "Нажмите на время, чтобы выбрать или отменить приём.",
                             color = if (times.isEmpty()) MaterialTheme.colorScheme.error else Muted)
-                        OutlinedTextField(comment, { comment = it }, label = { Text("Комментарий") },
-                            minLines = 2, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
+                        OutlinedTextField(comment, { comment = com.example.medreminder.domain.model.capitalizeFirstLetter(it) }, label = { Text("Комментарий") },
+                            placeholder = { Text("Например, запить водой") },
+                            supportingText = if (focusedField == "comment") {
+                                { Text("Необязательная подсказка к приёму. Она будет видна в карточке на экране «Сегодня».") }
+                            } else null,
+                            minLines = 2, modifier = Modifier.fillMaxWidth().onFocusChanged {
+                                if (it.isFocused) focusedField = "comment"
+                                else if (focusedField == "comment") focusedField = null
+                            }, enabled = !state.isSaving)
                         state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         Button(
                             enabled = valid && !state.isSaving,
@@ -158,16 +258,24 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
                             onClick = {
                                 val sorted = times.distinct().sorted()
                                 val first = sorted.first()
-                                val medicine = Medicine(0, name.trim(), dosage.trim(),
+                                val medicine = Medicine(0, name.trim(), "${dosage.trim()} $doseUnit",
                                     TimeUtils.getTimeOfDayFromHour(first / 60), first / 60, first % 60,
                                     startEpochDay = start, courseDays = days, weekdaysMask = weekdays,
-                                    times = sorted, comment = comment.trim())
+                                    times = sorted, comment = comment.trim(),
+                                    preparationId = preparation?.takeIf { it.cabinetOnly }?.id)
                                 scope.launch { if (viewModel.saveMedicine(medicine)) onBackClick() }
                             }
                         ) { Text(if (state.isSaving) "Сохранение…" else "Сохранить") }
                     }
                 }
             }
+        }
+        if (addingPreparation) {
+            AddPreparationScreen(
+                viewModel = viewModel,
+                onBackClick = { addingPreparation = false },
+                initialName = name
+            )
         }
         timeEditor?.let { original ->
             key(original) {
@@ -182,6 +290,9 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
         }
     }
 }
+
+internal fun scheduleDoseUnit(form: String): String =
+    com.example.medreminder.domain.model.scheduleDoseUnit(form)
 
 internal fun formatDoseTime(minutes: Int): String =
     String.format(Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)

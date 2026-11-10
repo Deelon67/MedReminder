@@ -10,5 +10,7 @@ interface MedicineRepository {
     // Теперь возвращает ID добавленного лекарства
     suspend fun addMedicine(medicine: Medicine): Long
 
+    suspend fun hideMedicineOnDate(medicine: Medicine, epochDay: Long)
+
     suspend fun deleteMedicine(medicine: Medicine)
 }

@@ -20,6 +20,8 @@ class MedicineAlarmScheduler(private val context: Context) {
         }
         val intent = Intent(context, MedicineAlarmReceiver::class.java).apply {
             putExtra(MedicineAlarmReceiver.EXTRA_NOTIFICATION_ID, medicine.id)
+            putExtra(DoseReminderManager.DAY, next.toLocalDate().toEpochDay())
+            putExtra(DoseReminderManager.MINUTES, next.hour * 60 + next.minute)
         }
         val pending = PendingIntent.getBroadcast(context, medicine.id, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

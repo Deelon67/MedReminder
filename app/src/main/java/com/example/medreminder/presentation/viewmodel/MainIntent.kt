@@ -10,6 +10,8 @@ sealed class MainIntent {
     // Добавить новое лекарство
     data class AddMedicine(val medicine: Medicine) : MainIntent()
 
+    data class HideMedicineOnDate(val medicine: Medicine, val epochDay: Long) : MainIntent()
+
     // Удалить лекарство
     data class DeleteMedicine(val medicine: Medicine) : MainIntent()
 }

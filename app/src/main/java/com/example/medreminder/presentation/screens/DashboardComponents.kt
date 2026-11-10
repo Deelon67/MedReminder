@@ -118,7 +118,7 @@ internal fun EmptyMedicines(cabinet: Boolean, onAdd: () -> Unit) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text(if (cabinet) "Аптечка пуста" else "Добавьте первое лекарство",
+        Text(if (cabinet) "Аптечка пуста" else "Добавьте первый приём",
             fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
         Text(
@@ -128,7 +128,7 @@ internal fun EmptyMedicines(cabinet: Boolean, onAdd: () -> Unit) {
         )
         Spacer(Modifier.height(16.dp))
         Button(onClick = onAdd, shape = RoundedCornerShape(17.dp), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 15.dp)) {
-            Text("Добавить лекарство", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(if (cabinet) "Добавить препарат" else "Добавить приём", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

@@ -17,7 +17,9 @@ import kotlinx.coroutines.launch
 class MainViewModel(
     private val getMedicinesUseCase: GetMedicinesUseCase,
     private val repository: MedicineRepository,
-    context: Context
+    context: Context,
+    private val doseRecords: com.example.medreminder.data.db.DoseRecordDao,
+    private val reminders: com.example.medreminder.DoseReminderManager
 ) : ViewModel() {
 
     private val alarmScheduler = MedicineAlarmScheduler(context)
@@ -27,6 +29,12 @@ class MainViewModel(
 
     init {
         processIntent(MainIntent.LoadMedicines)
+        viewModelScope.launch {
+            doseRecords.observeAll().collect { doses -> _state.update { it.copy(doses = doses) } }
+        }
+        viewModelScope.launch {
+            try { reminders.restore() } catch (e: Exception) { Log.e("MedReminder", "Не удалось восстановить напоминания", e) }
+        }
     }
 
     fun processIntent(intent: MainIntent) {
@@ -34,6 +42,7 @@ class MainViewModel(
             is MainIntent.LoadMedicines -> loadMedicines()
             is MainIntent.AddMedicine -> addMedicine(intent.medicine)
             is MainIntent.DeleteMedicine -> deleteMedicine(intent.medicine)
+            is MainIntent.HideMedicineOnDate -> hideMedicineOnDate(intent.medicine, intent.epochDay)
         }
     }
 
@@ -87,11 +96,93 @@ class MainViewModel(
         }
     }
 
+    suspend fun savePreparation(medicine: Medicine): Boolean {
+        if (_state.value.isSaving) return false
+        if (medicine.name.isBlank() || !medicine.cabinetOnly) {
+            _state.update { it.copy(saveError = "Укажите название препарата.") }
+            return false
+        }
+        _state.update { it.copy(isSaving = true, saveError = null) }
+        return try {
+            repository.addMedicine(medicine)
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(saveError = "Не удалось сохранить препарат. Попробуйте ещё раз.") }
+            false
+        } finally {
+            _state.update { it.copy(isSaving = false) }
+        }
+    }
+
+    fun takeDose(id: Int, day: Long, minutes: Int) = updateDose(id, day, minutes) {
+        reminders.take(id, day, minutes)
+    }
+
+    fun snoozeDose(id: Int, day: Long, minutes: Int, delay: Int) = updateDose(id, day, minutes) {
+        reminders.snooze(id, day, minutes, delay)
+    }
+
+    fun skipDose(id: Int, day: Long, minutes: Int) = updateDose(id, day, minutes) {
+        reminders.skip(id, day, minutes)
+    }
+
+    fun updateReminderSettings(enabled: Boolean, interval: Int) {
+        viewModelScope.launch {
+            try {
+                reminders.updateRepeatSettings(enabled, interval)
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "Не удалось изменить напоминания.") }
+            }
+        }
+    }
+
+    private fun updateDose(id: Int, day: Long, minutes: Int, action: suspend () -> Unit) {
+        val key = com.example.medreminder.DoseReminderManager.key(id, day, minutes)
+        if (key in _state.value.updatingDoses) return
+        _state.update { it.copy(updatingDoses = it.updatingDoses + key, error = null) }
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("MedReminder", "Не удалось обновить приём", e)
+                _state.update { it.copy(error = "Не удалось обновить приём. Попробуйте ещё раз.") }
+            } finally {
+                _state.update { it.copy(updatingDoses = it.updatingDoses - key) }
+            }
+        }
+    }
+
+    private fun hideMedicineOnDate(medicine: Medicine, epochDay: Long) {
+        viewModelScope.launch {
+            try {
+                repository.hideMedicineOnDate(medicine, epochDay)
+                reminders.cancelDay(medicine.id, epochDay)
+                alarmScheduler.scheduleMedicineAlarm(
+                    medicine.copy(hiddenDates = medicine.hiddenDates + epochDay)
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("MedReminder", "Не удалось убрать лекарство на выбранный день", e)
+                _state.update { it.copy(error = "Не удалось обновить расписание.") }
+            }
+        }
+    }
+
     private fun deleteMedicine(medicine: Medicine) {
         viewModelScope.launch {
             try {
+                val matching = _state.value.medicines.filter {
+                    com.example.medreminder.domain.model.medicineNameKey(it.name) ==
+                        com.example.medreminder.domain.model.medicineNameKey(medicine.name)
+                }
+                matching.forEach { reminders.cancelMedicine(it.id) }
                 repository.deleteMedicine(medicine)
-                alarmScheduler.cancelMedicineAlarm(medicine)
+                matching.forEach { alarmScheduler.cancelMedicineAlarm(it) }
                 Log.d("MedReminder", "Лекарство удалено, будильник отменён")
             } catch (e: Exception) {
                 Log.e("MedReminder", "Ошибка при удалении: ${e.message}")
