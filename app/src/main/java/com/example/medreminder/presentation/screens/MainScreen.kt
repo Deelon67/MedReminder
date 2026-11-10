@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,18 +66,27 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = { DashboardNavigation(tab) { tab = it } },
             floatingActionButton = {
-                if (tab == 2) {
-                    Surface(color = Accent, shape = RoundedCornerShape(20.dp), modifier = Modifier.size(60.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Add, null, tint = Background, modifier = Modifier.size(30.dp)) }
-                    }
-                } else if (tab < 2) {
+                if (tab == 0 || tab == 1) {
                     FloatingActionButton(
                         onClick = onAddMedicineClick,
                         containerColor = Accent,
-                        contentColor = Background,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.size(60.dp)
-                    ) { Icon(Icons.Default.Add, "Добавить лекарство", Modifier.size(30.dp)) }
+                        contentColor = DashboardColors.onPrimary,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 6.dp,
+                            pressedElevation = 10.dp
+                        ),
+                        modifier = Modifier.size(64.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize()
+                                .background(Brush.verticalGradient(listOf(Accent, DashboardColors.onPrimaryContainer)))
+                                .border(1.dp, DashboardColors.onPrimary.copy(alpha = .2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Add, "Добавить лекарство", Modifier.size(34.dp))
+                        }
+                    }
                 }
             }
         ) { padding ->
@@ -142,7 +153,7 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit) {
                         }
                     }
                 }
-                2 -> DiaryScreen(Modifier.padding(padding).padding(bottom = 88.dp), today)
+                2 -> DiaryScreen(Modifier.padding(padding), today)
                 3 -> ProfileScreen(Modifier.padding(padding), state.medicines.size)
             }
         }

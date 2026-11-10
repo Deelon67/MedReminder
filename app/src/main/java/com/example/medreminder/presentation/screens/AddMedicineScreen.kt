@@ -1,5 +1,6 @@
 package com.example.medreminder.presentation.screens
 
+import android.annotation.SuppressLint
 import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
@@ -39,7 +41,8 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
     var course by rememberSaveable { mutableStateOf("7") }
     var start by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     var weekdays by rememberSaveable { mutableIntStateOf(127) }
-    var times by rememberSaveable { mutableStateOf(listOf(480, 720, 1080)) }
+    var availableTimes by rememberSaveable { mutableStateOf(listOf(480, 720, 1080)) }
+    var times by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var comment by rememberSaveable { mutableStateOf("") }
     var timeEditor by rememberSaveable { mutableStateOf<Int?>(null) }
     val state by viewModel.state.collectAsState()
@@ -121,20 +124,29 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
                         Text("Время приёма", fontWeight = FontWeight.Bold)
                         TextButton(onClick = { timeEditor = -1 }, enabled = !state.isSaving) { Text("Добавить") }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            times.sorted().forEach { time ->
-                                InputChip(
-                                    selected = false, onClick = { timeEditor = time }, enabled = !state.isSaving,
+                            availableTimes.sorted().forEach { time ->
+                                val selected = time in times
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        times = if (selected) times - time else (times + time).sorted()
+                                    },
+                                    enabled = !state.isSaving,
                                     label = { Text(formatDoseTime(time)) },
-                                    trailingIcon = {
-                                        IconButton(onClick = { times = times - time }, enabled = !state.isSaving,
-                                            modifier = Modifier.size(24.dp)) {
-                                            Icon(Icons.Default.Close, "Удалить время ${formatDoseTime(time)}", Modifier.size(16.dp))
-                                        }
-                                    }
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                        selectedContainerColor = SoftAccent,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedLeadingIconColor = Accent
+                                    ),
+                                    leadingIcon = if (selected) {
+                                        { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
+                                    } else null
                                 )
                             }
                         }
-                        Text(if (times.isEmpty()) "Добавьте хотя бы одно время." else "Нажмите на время, чтобы изменить его.",
+                        Text(if (times.isEmpty()) "Выберите хотя бы одно время." else "Нажмите на время, чтобы выбрать или отменить приём.",
                             color = if (times.isEmpty()) MaterialTheme.colorScheme.error else Muted)
                         OutlinedTextField(comment, { comment = it }, label = { Text("Комментарий") },
                             minLines = 2, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
@@ -162,7 +174,8 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit) {
                 MedicineTimePicker(if (original < 0) 480 else original,
                     onDismiss = { timeEditor = null },
                     onConfirm = { chosen ->
-                        times = (times.filter { it != original } + chosen).distinct().sorted()
+                        availableTimes = (availableTimes + chosen).distinct().sorted()
+                        times = (times + chosen).distinct().sorted()
                         timeEditor = null
                     })
             }

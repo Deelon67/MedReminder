@@ -56,7 +56,6 @@ internal fun DiaryScreen(modifier: Modifier, today: LocalDate) {
                 Text("Отчёт для врача (PDF)", color = Background, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
-        Spacer(Modifier.height(84.dp))
     }
 }
 
