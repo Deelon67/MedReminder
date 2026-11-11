@@ -24,6 +24,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.medreminder.DayRoutinePreferences
+import com.example.medreminder.RoutineMoment
+import com.example.medreminder.mealTimes
 import com.example.medreminder.domain.TimeUtils
 import com.example.medreminder.domain.model.Medicine
 import com.example.medreminder.presentation.viewmodel.MainViewModel
@@ -46,7 +49,7 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
     var course by rememberSaveable { mutableStateOf("7") }
     var start by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
     var weekdays by rememberSaveable { mutableIntStateOf(0) }
-    var availableTimes by rememberSaveable { mutableStateOf(listOf(480, 720, 1080)) }
+    var customTimes by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var times by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     var comment by rememberSaveable { mutableStateOf("") }
     var timeEditor by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -66,6 +69,10 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
     val doseUnit = chosenDoseUnit ?: preparation?.form?.let(::scheduleDoseUnit).orEmpty()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val routinePreferences = remember(context.applicationContext) { DayRoutinePreferences(context) }
+    val routineFlow = remember(routinePreferences) { routinePreferences.observe() }
+    val routine by routineFlow.collectAsState(initial = routinePreferences.read())
+    val availableTimes = (routine.mealTimes() + customTimes + times).distinct().sorted()
     val days = course.toIntOrNull()
     val valid = name.isNotBlank() && dosage.isNotBlank() && doseUnit.isNotBlank() &&
         (dosage.toLongOrNull()?.let { it > 0 } == true) && days != null &&
@@ -98,7 +105,7 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
                                         Icon(Icons.Default.Close, "Закрыть")
                                     }
                                 }
-                                Text("Сначала задайте что принимать, затем добавьте время и длительность курса. Комментарий оставьте как дополнительную подсказку.",
+                                Text("Сначала введите название препарата, укажите количество на один приём и выберите единицу измерения. Затем задайте длительность курса, дату его начала и время приёма. Комментарий оставьте как дополнительную подсказку.",
                                     color = Muted)
                             }
                         }
@@ -288,10 +295,10 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
         }
         timeEditor?.let { original ->
             key(original) {
-                MedicineTimePicker(if (original < 0) 480 else original,
+                MedicineTimePicker(if (original < 0) routine.getValue(RoutineMoment.BREAKFAST) else original,
                     onDismiss = { timeEditor = null },
                     onConfirm = { chosen ->
-                        availableTimes = (availableTimes + chosen).distinct().sorted()
+                        customTimes = (customTimes + chosen).distinct().sorted()
                         times = (times + chosen).distinct().sorted()
                         timeEditor = null
                     })
@@ -308,7 +315,7 @@ internal fun formatDoseTime(minutes: Int): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MedicineTimePicker(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+internal fun MedicineTimePicker(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
     val time = rememberTimePickerState(initialHour = initial / 60, initialMinute = initial % 60, is24Hour = true)
     val configuration = LocalConfiguration.current
     var keyboard by rememberSaveable { mutableStateOf(false) }

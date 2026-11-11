@@ -75,13 +75,16 @@ class MedicineRepositoryImpl(
     }
 
     // Теперь возвращаем ID
-    override suspend fun addMedicine(medicine: Medicine): Long {
-        return dao.saveWithCabinetDetails(medicine.toEntity())
+    override suspend fun addMedicine(medicine: Medicine, updateQuantity: Boolean): Long {
+        return dao.saveWithCabinetDetails(medicine.toEntity(), updateQuantity)
     }
 
     override suspend fun hideMedicineOnDate(medicine: Medicine, epochDay: Long) {
         dao.updateHiddenDates(medicine.id, (medicine.hiddenDates + epochDay).sorted().joinToString(","))
     }
+
+    override suspend fun recordTakenAndConsume(id: Int, epochDay: Long, minutes: Int, takenAt: Long) =
+        dao.recordTakenAndConsume(id, epochDay, minutes, takenAt)
 
     override suspend fun deleteMedicine(medicine: Medicine) {
         dao.deleteByName(medicine.name)

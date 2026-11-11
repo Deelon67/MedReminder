@@ -65,13 +65,44 @@ class DoseReminderManager(
         if (medicine(id, day, minutes) == null) return@withLock false
         val now = System.currentTimeMillis()
         require(com.example.medreminder.domain.model.ReminderPolicy.canMarkTaken(scheduledAt(day, minutes), now))
-        if (records.find(id, day, minutes)?.skippedAt != null) return@withLock false
-        if (records.find(id, day, minutes)?.takenAt == null) {
-            records.save(DoseRecord(id, day, minutes, takenAt = now))
-        }
+        val result = repository.recordTakenAndConsume(id, day, minutes, now)
+        if (!result.accepted) return@withLock false
         alarms.cancel(repeatPending(id, day, minutes))
         notifications.cancel(tag(id, day, minutes), 0)
+        result.lowStock?.let(::showLowStock)
         true
+    }
+
+    private fun showLowStock(stock: com.example.medreminder.domain.model.LowMedicineStock) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        if (!notifications.areNotificationsEnabled()) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Напоминания о лекарствах", NotificationManager.IMPORTANCE_HIGH)
+        )
+        val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val name = com.example.medreminder.domain.model.capitalizeFirstLetter(stock.name)
+        val remaining = com.example.medreminder.domain.model.formatDoseForDisplay(stock.remaining)
+        val text = "$name: осталось $remaining. Пополните запас препарата — он почти закончился."
+        val notification = NotificationCompat.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_capsule_notification)
+            .setContentTitle("Пора пополнить аптечку")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        try {
+            // One notification per preparation, independent of the number of schedules.
+            notifications.notify("stock/${stock.preparationId}", 0, notification)
+        } catch (_: SecurityException) { /* Consumption stays recorded if permission was revoked. */ }
     }
 
     suspend fun snooze(id: Int, day: Long, minutes: Int, delay: Int): Boolean = mutex.withLock {
@@ -194,6 +225,7 @@ class DoseReminderManager(
         records.observeAll().first().filter { it.medicineId == id }.forEach {
             alarms.cancel(repeatPending(id, it.epochDay, it.minutes))
         }
+        notifications.cancel("stock/$id", 0)
         // Tags keep cancellation scoped to this medicine, without affecting other reminders.
         context.getSystemService(NotificationManager::class.java).activeNotifications
             .filter { it.tag?.startsWith("dose/$id/") == true }

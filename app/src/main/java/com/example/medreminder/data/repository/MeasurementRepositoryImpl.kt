@@ -13,6 +13,8 @@ class MeasurementRepositoryImpl(private val dao: MeasurementDao) : MeasurementRe
             it.secondary, it.pulse, it.measuredAt) }
     }
 
+    override suspend fun delete(id: Long) { dao.delete(id) }
+
     override suspend fun add(measurement: HealthMeasurement) {
         dao.insert(MeasurementEntity(type = measurement.type.name, value = measurement.value,
             secondary = measurement.secondary, pulse = measurement.pulse, measuredAt = measurement.measuredAt))

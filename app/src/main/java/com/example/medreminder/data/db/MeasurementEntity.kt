@@ -20,4 +20,7 @@ interface MeasurementDao {
 
     @Insert
     suspend fun insert(measurement: MeasurementEntity): Long
+
+    @Query("DELETE FROM health_measurements WHERE id = :id")
+    suspend fun delete(id: Long)
 }

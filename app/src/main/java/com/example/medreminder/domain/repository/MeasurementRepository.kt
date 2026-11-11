@@ -6,4 +6,5 @@ import kotlinx.coroutines.flow.Flow
 interface MeasurementRepository {
     fun observeAll(): Flow<List<HealthMeasurement>>
     suspend fun add(measurement: HealthMeasurement)
+    suspend fun delete(id: Long)
 }

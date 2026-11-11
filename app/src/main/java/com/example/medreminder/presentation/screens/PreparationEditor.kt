@@ -28,7 +28,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 internal fun editablePreparationNumber(value: String, unit: String): String =
-    value.removeSuffix(" $unit").takeIf { text -> text.all { it in '0'..'9' } }.orEmpty()
+    value.removeSuffix(" $unit").takeIf { it.matches(Regex("[0-9]+([.,][0-9]+)?")) }.orEmpty()
 
 internal fun preparationDosageUnit(form: String): String = when (form) {
     "Таблетки", "Капсулы", "Порошок", "Свечи", "Другое" -> "мг"
@@ -37,14 +37,10 @@ internal fun preparationDosageUnit(form: String): String = when (form) {
     else -> ""
 }
 
-internal fun preparationStockUnit(form: String): String = when (form) {
-    "Таблетки" -> "табл."
-    "Капсулы" -> "капс."
-    "Свечи" -> "шт."
-    "Сироп", "Капли", "Спрей", "Раствор" -> "мл"
-    "Мазь", "Крем", "Гель", "Порошок" -> "г"
-    "Другое" -> "мг"
-    else -> ""
+internal fun preparationStockUnit(form: String, quantity: String = ""): String {
+    val options = com.example.medreminder.domain.model.preparationStockUnits(form)
+    return com.example.medreminder.domain.model.savedStockUnit(quantity)?.takeIf { it in options }
+        ?: options.firstOrNull().orEmpty()
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -58,13 +54,17 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
     var dosage by rememberSaveable { mutableStateOf(
         initialMedicine?.let { editablePreparationNumber(it.dosage, preparationDosageUnit(it.form)) }.orEmpty()
     ) }
+    var chosenStockUnit by rememberSaveable { mutableStateOf(
+        preparationStockUnit(initialMedicine?.form.orEmpty(), initialMedicine?.quantity.orEmpty())
+    ) }
     var quantity by rememberSaveable { mutableStateOf(
-        initialMedicine?.let { editablePreparationNumber(it.quantity, preparationStockUnit(it.form)) }.orEmpty()
+        initialMedicine?.let { editablePreparationNumber(it.quantity, preparationStockUnit(it.form, it.quantity)) }.orEmpty()
     ) }
     var expiry by rememberSaveable { mutableStateOf(initialMedicine?.expiryEpochDay) }
     var note by rememberSaveable { mutableStateOf(com.example.medreminder.domain.model.capitalizeFirstLetter(initialMedicine?.comment.orEmpty())) }
     val dosageUnit = preparationDosageUnit(form)
-    val stockUnit = preparationStockUnit(form)
+    val stockUnits = com.example.medreminder.domain.model.preparationStockUnits(form)
+    val stockUnit = chosenStockUnit.takeIf { it in stockUnits } ?: preparationStockUnit(form)
     val state by viewModel.state.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -125,7 +125,10 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
                                     enabled = !state.isSaving,
                                     onClick = {
                                         if (preparationDosageUnit(option) != dosageUnit) { dosage = ""; dosageEdited = true }
-                                        if (preparationStockUnit(option) != stockUnit) { quantity = ""; quantityEdited = true }
+                                        if (option != form) {
+                                            if (preparationStockUnit(option) != stockUnit) { quantity = ""; quantityEdited = true }
+                                            chosenStockUnit = preparationStockUnit(option)
+                                        }
                                         form = option
                                     }
                                 )
@@ -146,9 +149,32 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !state.isSaving && dosageUnit.isNotEmpty()
                         )
+                        if (stockUnits.size > 1) {
+                            Text("Единица запаса", fontWeight = FontWeight.Bold)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                stockUnits.forEach { unit ->
+                                    SelectionChip(
+                                        text = if (unit == "кап.") "капли" else unit,
+                                        selected = stockUnit == unit,
+                                        enabled = !state.isSaving,
+                                        onClick = {
+                                            if (stockUnit != unit) {
+                                                chosenStockUnit = unit
+                                                quantity = ""
+                                                quantityEdited = true
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            Text("Для автоматического списания выберите ту же единицу, что и в схеме.",
+                                style = MaterialTheme.typography.bodySmall, color = Muted)
+                        }
                         OutlinedTextField(
                             value = quantity,
-                            onValueChange = { value -> if (value.all { it in '0'..'9' }) { quantity = value; quantityEdited = true } },
+                            onValueChange = { value ->
+                                if (value.matches(Regex("[0-9]*([.,][0-9]*)?"))) { quantity = value; quantityEdited = true }
+                            },
                             label = { Text("Количество в запасе") },
                             suffix = { Text(stockUnit) },
                             supportingText = {
@@ -156,7 +182,7 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
                                     else if (!quantityEdited && quantity.isEmpty() && !initialMedicine?.quantity.isNullOrBlank()) "Текущее значение: ${initialMedicine?.quantity}. Введите число, чтобы изменить."
                                     else "Введите только число. Единица: $stockUnit")
                             },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !state.isSaving && stockUnit.isNotEmpty()
@@ -187,7 +213,8 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
                             minLines = 2, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving)
                         state.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         Button(
-                            enabled = name.isNotBlank() && !state.isSaving,
+                            enabled = name.isNotBlank() && !state.isSaving &&
+                                (!quantityEdited || quantity.isBlank() || quantity.matches(Regex("[0-9]+([.,][0-9]+)?"))),
                             modifier = Modifier.fillMaxWidth(),
                             contentPadding = PaddingValues(18.dp),
                             onClick = {
@@ -203,7 +230,7 @@ fun AddPreparationScreen(viewModel: MainViewModel, onBackClick: () -> Unit, init
                                             else if (quantity.isBlank()) "" else "$quantity $stockUnit",
                                         expiryEpochDay = expiry
                                     )
-                                    if (viewModel.savePreparation(preparation)) onBackClick()
+                                    if (viewModel.savePreparation(preparation, updateQuantity = initialMedicine == null || quantityEdited)) onBackClick()
                                 }
                             }
                         ) { Text(if (state.isSaving) "Сохранение…" else if (initialMedicine == null) "Сохранить в аптечку" else "Сохранить изменения") }

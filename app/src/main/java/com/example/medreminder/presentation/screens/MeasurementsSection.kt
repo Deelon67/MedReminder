@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,9 +26,14 @@ internal fun MeasurementsSection(
     state: MainState,
     now: ZonedDateTime,
     onSave: suspend (MeasurementType, String, String, String) -> Boolean,
-    onClearError: () -> Unit
+    onClearError: () -> Unit,
+    onDelete: suspend (Long) -> Boolean
 ) {
     var adding by rememberSaveable { mutableStateOf(false) }
+    var pendingRemovalId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var deleting by remember { mutableStateOf(false) }
+    var removalError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     val formatter = remember { DateTimeFormatter.ofPattern("d MMMM yyyy, HH:mm", Locale.forLanguageTag("ru")) }
     if (state.measurementsLoading) {
         CircularProgressIndicator()
@@ -51,17 +58,84 @@ internal fun MeasurementsSection(
         state.measurements.forEach { measurement ->
             key(measurement.id) {
                 DashboardPanel(Modifier.fillMaxWidth()) {
-                    Text(measurement.type.title, fontWeight = FontWeight.Bold, color = Ink)
-                    Text(measurement.displayValue(), style = MaterialTheme.typography.titleLarge, color = Accent)
+                    val reference = measurement.reference()
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(measurement.type.title, fontWeight = FontWeight.Bold, color = Ink,
+                            modifier = Modifier.weight(1f))
+                        MeasurementStatusBadge(reference.level, measurement.type == MeasurementType.GLUCOSE)
+                    }
+                    Row(Modifier.fillMaxWidth(),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(measurement.displayValue(), style = MaterialTheme.typography.bodyLarge,
+                            color = Accent, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { removalError = null; pendingRemovalId = measurement.id },
+                            enabled = !deleting) {
+                            Icon(Icons.Default.Delete, "Удалить показатель", tint = Muted)
+                        }
+                    }
                     measurement.pulse?.let { Text("Пульс: $it уд/мин", color = Muted) }
                     Text(Instant.ofEpochMilli(measurement.measuredAt).atZone(now.zone).format(formatter),
                         style = MaterialTheme.typography.bodySmall, color = Muted)
+                    Text(reference.hint, style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
             }
         }
     }
+    val removalTarget = state.measurements.firstOrNull { it.id == pendingRemovalId }
+    if (removalTarget != null) {
+        val dismissRemoval = { if (!deleting) { pendingRemovalId = null; removalError = null } }
+        AlertDialog(
+            onDismissRequest = dismissRemoval,
+            title = { Text("Удалить показатель?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val recordedAt = Instant.ofEpochMilli(removalTarget.measuredAt).atZone(now.zone).format(formatter)
+                    Text("Удалить запись «${removalTarget.type.title}: ${removalTarget.displayValue()}» от $recordedAt? Восстановить её будет нельзя.")
+                    removalError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !deleting,
+                    onClick = {
+                        deleting = true
+                        scope.launch {
+                            try {
+                                if (onDelete(removalTarget.id)) {
+                                    pendingRemovalId = null
+                                    removalError = null
+                                } else {
+                                    removalError = "Не удалось удалить показатель. Попробуйте ещё раз."
+                                }
+                            } finally {
+                                deleting = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text(if (deleting) "Удаление…" else "Удалить") }
+            },
+            dismissButton = { TextButton(onClick = dismissRemoval, enabled = !deleting) { Text("Отмена") } }
+        )
+    }
     if (adding) {
         MeasurementDialog(state, now, onDismiss = { adding = false }, onSave = onSave)
+    }
+}
+
+@Composable
+private fun MeasurementStatusBadge(level: MeasurementLevel, fasting: Boolean) {
+    val (background, foreground) = when (level) {
+        MeasurementLevel.NORMAL -> androidx.compose.ui.graphics.Color(0xFFDCEEE0) to androidx.compose.ui.graphics.Color(0xFF285C3A)
+        MeasurementLevel.ELEVATED -> androidx.compose.ui.graphics.Color(0xFFFFF0C7) to androidx.compose.ui.graphics.Color(0xFF795A13)
+        MeasurementLevel.OUTSIDE -> androidx.compose.ui.graphics.Color(0xFFFBE4E1) to androidx.compose.ui.graphics.Color(0xFF9C3634)
+        MeasurementLevel.UNKNOWN -> androidx.compose.ui.graphics.Color(0xFFEEF0F2) to Muted
+    }
+    Surface(color = background, shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)) {
+        Text(if (fasting) "Натощак: ${level.title.lowercase(Locale.forLanguageTag("ru"))}" else level.title,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = foreground)
     }
 }
 

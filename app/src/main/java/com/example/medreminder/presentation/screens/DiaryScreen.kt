@@ -65,12 +65,15 @@ internal fun DiaryScreen(modifier: Modifier, state: MainState, viewModel: com.ex
         ScreenTitle("Дневник")
         DiaryTabs(selected = tab, onSelect = { tab = it })
         if (tab == 1) {
-            MeasurementsSection(state, now, viewModel::saveMeasurement, viewModel::clearMeasurementError)
+            MeasurementsSection(state, now, viewModel::saveMeasurement, viewModel::clearMeasurementError,
+                viewModel::deleteMeasurement)
         } else if (state.isLoading) {
             CircularProgressIndicator()
         } else {
             DashboardPanel(Modifier.fillMaxWidth()) {
-                Text(statistics.percent?.let { "$it%" } ?: "—", fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                statistics.percent?.let { percent ->
+                    Text("$percent%", fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                }
                 Text("Соблюдение за текущий месяц", color = Muted)
                 Text("Принято ${statistics.taken} из ${statistics.due} наступивших приёмов", color = Muted,
                     style = MaterialTheme.typography.bodySmall)
@@ -119,7 +122,7 @@ internal fun DiaryScreen(modifier: Modifier, state: MainState, viewModel: com.ex
                                 (day.percent?.let { "$it процентов" } ?: "нет наступивших приёмов") +
                                 if (day.date == date) ", выбранный день" else ""
                         }.background(
-                            if (day.date == date) Accent.copy(alpha = 0.24f) else Outline.copy(alpha = 0.35f),
+                            if (day.date == date) Accent.copy(alpha = 0.24f) else Outline.copy(alpha = 0.75f),
                             RoundedCornerShape(3.dp)
                         ).border(
                             1.dp,

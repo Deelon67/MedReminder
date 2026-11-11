@@ -77,6 +77,18 @@ class MainViewModel(
         viewModelScope.launch { saveMedicine(medicine) }
     }
 
+    suspend fun deleteMeasurement(id: Long): Boolean {
+        return try {
+            measurementRepository.delete(id)
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("MedReminder", "Не удалось удалить показатель", e)
+            false
+        }
+    }
+
     fun clearMeasurementError() { _state.update { it.copy(measurementSaveError = null) } }
 
     suspend fun saveMeasurement(type: com.example.medreminder.domain.model.MeasurementType,
@@ -139,7 +151,7 @@ class MainViewModel(
         }
     }
 
-    suspend fun savePreparation(medicine: Medicine): Boolean {
+    suspend fun savePreparation(medicine: Medicine, updateQuantity: Boolean = true): Boolean {
         if (_state.value.isSaving) return false
         if (medicine.name.isBlank() || !medicine.cabinetOnly) {
             _state.update { it.copy(saveError = "Укажите название препарата.") }
@@ -147,7 +159,7 @@ class MainViewModel(
         }
         _state.update { it.copy(isSaving = true, saveError = null) }
         return try {
-            repository.addMedicine(medicine)
+            repository.addMedicine(medicine, updateQuantity)
             true
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e

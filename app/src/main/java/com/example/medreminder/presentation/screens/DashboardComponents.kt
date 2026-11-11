@@ -8,6 +8,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -46,7 +48,7 @@ internal fun DashboardNavigation(selected: Int, onSelect: (Int) -> Unit) {
         shape = RoundedCornerShape(25.dp), color = Panel, border = BorderStroke(1.dp, Outline)
     ) {
         Row(Modifier.selectableGroup().padding(vertical = 10.dp)) {
-            listOf("Расписание", "Аптечка", "Дневник", "Профиль").forEachIndexed { index, label ->
+            listOf("Расписание", "Аптечка", "Дневник", "Настройки").forEachIndexed { index, label ->
                 val color = if (selected == index) Accent else Muted
                 Column(
                     Modifier.weight(1f).selectable(selected == index, role = Role.Tab, onClick = { onSelect(index) }).padding(vertical = 2.dp),
@@ -64,6 +66,10 @@ internal fun DashboardNavigation(selected: Int, onSelect: (Int) -> Unit) {
 
 @Composable
 private fun NavigationGlyph(index: Int, color: Color) {
+    if (index == 3) {
+        Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(23.dp), tint = color)
+        return
+    }
     Canvas(Modifier.size(23.dp)) {
         val w = size.width
         val stroke = 1.6.dp.toPx()
@@ -89,12 +95,6 @@ private fun NavigationGlyph(index: Int, color: Color) {
                 drawRoundRect(color, Offset(w * .18f, w * .08f), Size(w * .66f, w * .84f), corner, style = Stroke(stroke))
                 drawLine(color, Offset(w * .34f, w * .08f), Offset(w * .34f, w * .92f), stroke)
                 for (y in listOf(.34f, .52f, .70f)) drawLine(color, Offset(w * .46f, w * y), Offset(w * .70f, w * y), stroke)
-            }
-            else -> {
-                // Airy outline avatar.
-                drawCircle(color, w * .44f, style = Stroke(stroke))
-                drawCircle(color, w * .14f, Offset(w * .5f, w * .36f), style = Stroke(stroke))
-                drawArc(color, 180f, 180f, false, Offset(w * .25f, w * .59f), Size(w * .5f, w * .4f), style = Stroke(stroke))
             }
         }
     }
@@ -134,8 +134,12 @@ internal fun EmptyMedicines(cabinet: Boolean, onAdd: () -> Unit) {
 }
 
 @Composable
-internal fun DashboardPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun DashboardPanel(
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
     Surface(modifier, shape = RoundedCornerShape(23.dp), color = Panel, border = BorderStroke(1.dp, Outline)) {
-        Column(Modifier.padding(16.dp), content = content)
+        Column(Modifier.padding(contentPadding), content = content)
     }
 }

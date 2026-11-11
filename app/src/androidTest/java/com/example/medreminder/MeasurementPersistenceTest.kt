@@ -18,6 +18,31 @@ import org.junit.runner.RunWith
 class MeasurementPersistenceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Test fun deletionRemovesOnlySelectedRecordAndSurvivesReopening() = runBlocking {
+        val name = "measurement-delete-test.db"
+        context.deleteDatabase(name)
+        var db = Room.databaseBuilder(context, AppDatabase::class.java, name).build()
+        try {
+            val repository = MeasurementRepositoryImpl(db.measurementDao())
+            val weight = parseMeasurement(MeasurementType.WEIGHT, "70", measuredAt = 1000)!!
+            repository.add(weight)
+            repository.add(weight)
+            val rows = repository.observeAll().first()
+            val removed = rows.first()
+            val kept = rows.last()
+            repository.delete(removed.id)
+            assertEquals(listOf(kept), repository.observeAll().first())
+            repository.delete(removed.id)
+            assertEquals(listOf(kept), repository.observeAll().first())
+            db.close()
+            db = Room.databaseBuilder(context, AppDatabase::class.java, name).build()
+            assertEquals(listOf(kept), MeasurementRepositoryImpl(db.measurementDao()).observeAll().first())
+        } finally {
+            db.close()
+            context.deleteDatabase(name)
+        }
+    }
+
     @Test fun rollbackFromVersionNinePreservesRecordedData() = runBlocking {
         val name = "measurement-rollback-test.db"
         context.deleteDatabase(name)
