@@ -47,7 +47,7 @@ fun HealthMeasurement.reference(): MeasurementReference {
         MeasurementType.PRESSURE -> "Ориентир в покое: 90–119 / 60–79 мм рт. ст."
         MeasurementType.PULSE -> "Ориентир в покое: 60–100 уд/мин"
         MeasurementType.GLUCOSE -> "Только натощак: 3,9–5,5 ммоль/л. После еды эта оценка не применяется."
-        MeasurementType.TEMPERATURE -> "Диапазон приложения: 36,6–36,8 °C. Не универсальная медицинская норма."
+        MeasurementType.TEMPERATURE -> "Норма: 36,6–36,8 °C."
         MeasurementType.WEIGHT -> "Норма веса зависит от роста. Здесь отслеживается изменение веса."
     }
     return MeasurementReference(if (value.isFinite() && value > 0) level else MeasurementLevel.UNKNOWN, hint)
