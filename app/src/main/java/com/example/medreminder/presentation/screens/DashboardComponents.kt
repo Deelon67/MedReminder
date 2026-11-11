@@ -46,7 +46,7 @@ internal fun DashboardNavigation(selected: Int, onSelect: (Int) -> Unit) {
         shape = RoundedCornerShape(25.dp), color = Panel, border = BorderStroke(1.dp, Outline)
     ) {
         Row(Modifier.selectableGroup().padding(vertical = 10.dp)) {
-            listOf("Сегодня", "Аптечка", "Дневник", "Профиль").forEachIndexed { index, label ->
+            listOf("Расписание", "Аптечка", "Дневник", "Профиль").forEachIndexed { index, label ->
                 val color = if (selected == index) Accent else Muted
                 Column(
                     Modifier.weight(1f).selectable(selected == index, role = Role.Tab, onClick = { onSelect(index) }).padding(vertical = 2.dp),

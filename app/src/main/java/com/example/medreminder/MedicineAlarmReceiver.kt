@@ -41,8 +41,29 @@ class MedicineAlarmReceiver : BroadcastReceiver(), KoinComponent {
                     LocalDate.ofEpochDay(day)
                     when (intent.action) {
                         DoseReminderManager.SKIP -> manager.skip(id, day, minutes)
-                        DoseReminderManager.TAKEN -> manager.take(id, day, minutes)
-                        DoseReminderManager.SNOOZE -> manager.snooze(id, day, minutes, intent.getIntExtra(DoseReminderManager.DELAY, 15))
+                        DoseReminderManager.TAKEN -> {
+                            if (manager.take(id, day, minutes)) {
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(
+                                        context.applicationContext,
+                                        R.string.taken_confirmation,
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                        DoseReminderManager.SNOOZE -> {
+                            val delay = intent.getIntExtra(DoseReminderManager.DELAY, 15)
+                            if (manager.snooze(id, day, minutes, delay)) {
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(
+                                        context.applicationContext,
+                                        context.getString(R.string.snooze_confirmation, delay),
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
                         DoseReminderManager.REPEAT -> manager.show(id, day, minutes)
                         else -> {
                             // Always schedule the next regular dose, including when this dose was already taken.

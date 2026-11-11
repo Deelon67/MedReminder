@@ -61,23 +61,24 @@ class DoseReminderManager(
             it.id == id && minutes in it.times && it.isScheduledOn(LocalDate.ofEpochDay(day))
         }
 
-    suspend fun take(id: Int, day: Long, minutes: Int) = mutex.withLock {
-        if (medicine(id, day, minutes) == null) return@withLock
+    suspend fun take(id: Int, day: Long, minutes: Int): Boolean = mutex.withLock {
+        if (medicine(id, day, minutes) == null) return@withLock false
         val now = System.currentTimeMillis()
         require(com.example.medreminder.domain.model.ReminderPolicy.canMarkTaken(scheduledAt(day, minutes), now))
-        if (records.find(id, day, minutes)?.skippedAt != null) return@withLock
+        if (records.find(id, day, minutes)?.skippedAt != null) return@withLock false
         if (records.find(id, day, minutes)?.takenAt == null) {
-            records.save(DoseRecord(id, day, minutes, takenAt = System.currentTimeMillis()))
+            records.save(DoseRecord(id, day, minutes, takenAt = now))
         }
         alarms.cancel(repeatPending(id, day, minutes))
         notifications.cancel(tag(id, day, minutes), 0)
+        true
     }
 
-    suspend fun snooze(id: Int, day: Long, minutes: Int, delay: Int) = mutex.withLock {
+    suspend fun snooze(id: Int, day: Long, minutes: Int, delay: Int): Boolean = mutex.withLock {
         require(delay in setOf(15, 30, 60))
-        if (medicine(id, day, minutes) == null) return@withLock
+        if (medicine(id, day, minutes) == null) return@withLock false
         val record = records.find(id, day, minutes)
-        if (record?.takenAt != null || record?.skippedAt != null) return@withLock
+        if (record?.takenAt != null || record?.skippedAt != null) return@withLock false
         val scheduled = LocalDate.ofEpochDay(day).atTime(minutes / 60, minutes % 60).atZone(ZoneId.systemDefault())
         require(scheduled.toInstant().toEpochMilli() <= System.currentTimeMillis())
         val until = System.currentTimeMillis() + delay * 60_000L
@@ -86,6 +87,7 @@ class DoseReminderManager(
         records.save(DoseRecord(id, day, minutes, snoozedUntil = until,
             repeatCount = com.example.medreminder.domain.model.ReminderPolicy.MAX_REPEATS))
         notifications.cancel(tag(id, day, minutes), 0)
+        true
     }
 
     private fun scheduledAt(day: Long, minutes: Int): Long =
@@ -151,13 +153,14 @@ class DoseReminderManager(
             count == 1 -> "Приём пока не отмечен. Вы уже приняли препарат?"
             else -> "Небольшая забота о себе — время вашего приёма."
         }
-        val text = "${medicine.name} — ${medicine.dosage}. $description"
+        val dosage = com.example.medreminder.domain.model.formatDoseForDisplay(medicine.dosage, medicine.form)
+        val text = "${medicine.name} — $dosage. $description"
         val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_capsule_notification)
             .setContentTitle(if (record?.snoozedUntil != null || count > 0) "Напоминаем с заботой" else "Время позаботиться о себе")
             .setOnlyAlertOnce(false)
             .setWhen(now)
-            .setContentText("${medicine.name} — ${medicine.dosage}")
+            .setContentText("${medicine.name} — $dosage")
             .setSubText("Приём в " + String.format(java.util.Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60))
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
@@ -166,8 +169,8 @@ class DoseReminderManager(
             .setContentIntent(open)
             .setAutoCancel(true)
             .addAction(0, "Принято", action(TAKEN))
-            .addAction(0, "Через 15 мин", action(SNOOZE, 15))
-            .addAction(0, "Через 30 мин", action(SNOOZE, 30))
+            .addAction(0, "15 мин.", action(SNOOZE, 15))
+            .addAction(0, "30 мин.", action(SNOOZE, 30))
             .build()
         try {
             notifications.notify(tag(id, day, minutes), 0, notification)
@@ -197,15 +200,39 @@ class DoseReminderManager(
             .forEach { notifications.cancel(it.tag, it.id) }
     }
 
+    suspend fun schedulePastDoses(medicine: com.example.medreminder.domain.model.Medicine) = mutex.withLock {
+        schedulePastDosesLocked(medicine, System.currentTimeMillis())
+    }
+
+    private suspend fun schedulePastDosesLocked(
+        medicine: com.example.medreminder.domain.model.Medicine, now: Long
+    ) {
+        val date = java.time.Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
+        if (!medicine.isScheduledOn(date)) return
+        val day = date.toEpochDay()
+        medicine.times.distinct().forEach { minutes ->
+            if (records.find(medicine.id, day, minutes) == null) {
+                val next = com.example.medreminder.domain.model.ReminderPolicy.firstRepeatForPastDose(
+                    scheduledAt(day, minutes), now, preferences.enabled, preferences.intervalMinutes
+                )
+                if (next != null) {
+                    scheduleRepeat(medicine.id, day, minutes, next)
+                    records.save(DoseRecord(medicine.id, day, minutes, autoReminderAt = next))
+                }
+            }
+        }
+    }
+
     suspend fun restore() = mutex.withLock {
         val medicines = repository.getAllMedicines().first()
         medicines.filter { !it.cabinetOnly }.forEach { MedicineAlarmScheduler(context).scheduleMedicineAlarm(it) }
         val current = System.currentTimeMillis()
+        medicines.forEach { schedulePastDosesLocked(it, current) }
         records.observeAll().first().filter { it.takenAt == null && it.skippedAt == null }.forEach { record ->
             alarms.cancel(repeatPending(record.medicineId, record.epochDay, record.minutes))
             val auto = if (record.autoReminderAt != null && preferences.enabled &&
                 current - scheduledAt(record.epochDay, record.minutes) < 24 * 60 * 60_000L)
-                (record.notifiedAt ?: current) + preferences.intervalMinutes * 60_000L else null
+                (record.notifiedAt ?: scheduledAt(record.epochDay, record.minutes)) + preferences.intervalMinutes * 60_000L else null
             val updated = record.copy(autoReminderAt = auto)
             if (updated != record) records.save(updated)
             val pendingAt = updated.snoozedUntil ?: updated.autoReminderAt

@@ -27,7 +27,7 @@ class MedicinePersistenceTest {
             db.version = 1
         }
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).build()
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8).build()
         try {
             val old = MedicineRepositoryImpl(db.medicineDao()).getAllMedicines().first().single()
             assertEquals(7, old.id)
@@ -147,6 +147,32 @@ class MedicinePersistenceTest {
             assertEquals(listOf(480), after.single { !it.cabinetOnly }.times)
             repository.addMedicine(inventory.copy(form = "Капсулы", dosage = "35 мг", quantity = "38 капс."))
             assertEquals("3 капс.", repository.getAllMedicines().first().single { !it.cabinetOnly }.dosage)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test fun changingPreparationFormUpdatesSavedScheduleUnit() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val repository = MedicineRepositoryImpl(db.medicineDao())
+            val preparation = Medicine(0, "Препарат", "", TimeOfDay.MORNING, 0, 0,
+                cabinetOnly = true, times = emptyList(), form = "Капли")
+            val id = repository.addMedicine(preparation).toInt()
+            repository.addMedicine(Medicine(0, preparation.name, "3 кап.", TimeOfDay.MORNING, 8, 0,
+                preparationId = id, comment = "После еды"))
+            repository.addMedicine(Medicine(0, preparation.name, "20 мг", TimeOfDay.EVENING, 18, 0,
+                preparationId = id))
+            repository.addMedicine(preparation.copy(id = id, form = "Таблетки"))
+            val schedules = repository.getAllMedicines().first().filter { !it.cabinetOnly }
+            assertEquals(setOf("3 табл.", "20 мг"), schedules.map { it.dosage }.toSet())
+            assertEquals(listOf(480), schedules.single { it.dosage == "3 табл." }.times)
+            assertEquals("После еды", schedules.single { it.dosage == "3 табл." }.comment)
+            assertEquals(setOf("3 табл.", "20 мг"),
+                db.medicineDao().getMedicinesSnapshot().filter { !it.cabinetOnly }.map { it.dosage }.toSet())
+            repository.addMedicine(preparation.copy(id = id, form = "Капсулы"))
+            assertEquals(setOf("3 капс.", "20 мг"),
+                repository.getAllMedicines().first().filter { !it.cabinetOnly }.map { it.dosage }.toSet())
         } finally {
             db.close()
         }

@@ -10,5 +10,10 @@ data class MainState(
     val isSaving: Boolean = false,
     val saveError: String? = null,
     val doses: List<com.example.medreminder.data.db.DoseRecord> = emptyList(),
-    val updatingDoses: Set<String> = emptySet()
+    val updatingDoses: Set<String> = emptySet(),
+    val measurements: List<com.example.medreminder.domain.model.HealthMeasurement> = emptyList(),
+    val measurementsLoading: Boolean = true,
+    val measurementsError: String? = null,
+    val isSavingMeasurement: Boolean = false,
+    val measurementSaveError: String? = null
 )

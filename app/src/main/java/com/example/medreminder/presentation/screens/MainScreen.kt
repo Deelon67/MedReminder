@@ -44,15 +44,17 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit, onAddPr
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var chosenDate by rememberSaveable { mutableStateOf<Long?>(null) }
     var search by rememberSaveable { mutableStateOf("") }
+    var pendingRemovalId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var pendingRemovalDay by rememberSaveable { mutableStateOf<Long?>(null) }
     val onAddClick = if (tab == 1) onAddPreparationClick else onAddMedicineClick
     val cabinet = com.example.medreminder.domain.model.cabinetMedicines(state.medicines)
     val today = rememberPhoneDate()
     val selected = chosenDate?.let(LocalDate::ofEpochDay) ?: today
-    val query = search.trim()
+    val query = com.example.medreminder.domain.model.medicineNameKey(search)
     val medicines = (if (tab == 1) cabinet else state.medicines)
         .filter { medicine ->
             if (tab == 0) medicine.isScheduledOn(selected)
-            else query.isEmpty() || medicine.name.contains(query, ignoreCase = true)
+            else query.isEmpty() || com.example.medreminder.domain.model.medicineNameKey(medicine.name).startsWith(query)
         }
         .sortedWith(compareBy({ it.hour }, { it.minute }, { it.name }))
     val context = LocalContext.current
@@ -154,20 +156,51 @@ fun MainScreen(viewModel: MainViewModel, onAddMedicineClick: () -> Unit, onAddPr
                         items(medicines, key = { it.id }) { medicine ->
                             if (tab == 0) {
                                 TodayDoseCard(medicine, selected, state, viewModel) {
-                                    viewModel.processIntent(MainIntent.HideMedicineOnDate(medicine, selected.toEpochDay()))
+                                    pendingRemovalDay = selected.toEpochDay()
+                                    pendingRemovalId = medicine.id
                                 }
                             } else {
                                 CabinetMedicineCard(medicine, today, onAddSchedule = { onAddSchedule(medicine.id) },
                                     onOpen = { onOpenPreparation(medicine.id) }) {
-                                    viewModel.processIntent(MainIntent.DeleteMedicine(medicine))
+                                    pendingRemovalDay = null
+                                    pendingRemovalId = medicine.id
                                 }
                             }
                         }
                     }
                 }
-                2 -> DiaryScreen(Modifier.padding(padding), today)
+                2 -> DiaryScreen(Modifier.padding(padding), state, viewModel)
                 3 -> ProfileScreen(Modifier.padding(padding), cabinet.size, viewModel::updateReminderSettings)
             }
+        }
+        val removalTarget = (cabinet + state.medicines).firstOrNull { it.id == pendingRemovalId }
+        if (removalTarget != null) {
+            val day = pendingRemovalDay
+            val dismissRemoval = { pendingRemovalId = null; pendingRemovalDay = null }
+            AlertDialog(
+                onDismissRequest = dismissRemoval,
+                title = { Text(if (day == null) "Удалить препарат?" else "Убрать приёмы на этот день?") },
+                text = {
+                    val name = com.example.medreminder.domain.model.capitalizeFirstLetter(removalTarget.name)
+                    Text(if (day == null) {
+                        "«$name» будет удалён из аптечки вместе со всеми схемами приёма. Напоминания будут отменены."
+                    } else {
+                        val date = LocalDate.ofEpochDay(day).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+                        "Убрать приём препарата «$name» на $date? Схема и приёмы в другие дни сохранятся."
+                    })
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            dismissRemoval()
+                            viewModel.processIntent(if (day == null) MainIntent.DeleteMedicine(removalTarget)
+                                else MainIntent.HideMedicineOnDate(removalTarget, day))
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Text(if (day == null) "Удалить" else "Убрать приём(-ы)") }
+                },
+                dismissButton = { TextButton(onClick = dismissRemoval) { Text("Отмена") } }
+            )
         }
     }
 }

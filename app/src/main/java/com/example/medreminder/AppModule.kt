@@ -19,12 +19,16 @@ val appModule = module {
             androidContext(),
             AppDatabase::class.java,
             "medicines_database"
-        ).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_9_8).build()
     }
 
     // Создаем DAO из базы данных
     single { get<AppDatabase>().medicineDao() }
     single { get<AppDatabase>().doseRecordDao() }
+    single { get<AppDatabase>().measurementDao() }
+    single<com.example.medreminder.domain.repository.MeasurementRepository> {
+        com.example.medreminder.data.repository.MeasurementRepositoryImpl(get())
+    }
     single { DoseReminderManager(androidContext(), get(), get()) }
 
     // Создаем репозиторий
@@ -34,5 +38,5 @@ val appModule = module {
     single { GetMedicinesUseCase(get()) }
 
     // Создаем ViewModel (теперь с контекстом)
-    viewModel { MainViewModel(get(), get(), androidContext(), get(), get()) }
+    viewModel { MainViewModel(get(), get(), androidContext(), get(), get(), get()) }
 }

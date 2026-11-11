@@ -19,10 +19,27 @@ class Converters {
 }
 
 // @Database говорит Room, что это база данных
-@Database(entities = [MedicineEntity::class, DoseRecord::class], version = 7, exportSchema = false)
+@Database(entities = [MedicineEntity::class, DoseRecord::class, MeasurementEntity::class], version = 8, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     companion object {
+        // Restore the measurement schema after removing reference-range assessment.
+        // Keep every measurement ID and value, as well as all medicine and dose tables.
+        val MIGRATION_9_8 = object : androidx.room.migration.Migration(9, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE health_measurements_v8 (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, type TEXT NOT NULL, value REAL NOT NULL, secondary REAL, pulse INTEGER, measuredAt INTEGER NOT NULL)")
+                db.execSQL("INSERT INTO health_measurements_v8 (id, type, value, secondary, pulse, measuredAt) SELECT id, type, value, secondary, pulse, measuredAt FROM health_measurements")
+                db.execSQL("DROP TABLE health_measurements")
+                db.execSQL("ALTER TABLE health_measurements_v8 RENAME TO health_measurements")
+            }
+        }
+
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS health_measurements (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, type TEXT NOT NULL, value REAL NOT NULL, secondary REAL, pulse INTEGER, measuredAt INTEGER NOT NULL)")
+            }
+        }
+
         val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE dose_records ADD COLUMN skippedAt INTEGER")
@@ -73,4 +90,5 @@ abstract class AppDatabase : RoomDatabase() {
     // Абстрактный метод для получения DAO
     abstract fun medicineDao(): MedicineDao
     abstract fun doseRecordDao(): DoseRecordDao
+    abstract fun measurementDao(): MeasurementDao
 }

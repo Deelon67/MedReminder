@@ -19,7 +19,8 @@ class MainViewModel(
     private val repository: MedicineRepository,
     context: Context,
     private val doseRecords: com.example.medreminder.data.db.DoseRecordDao,
-    private val reminders: com.example.medreminder.DoseReminderManager
+    private val reminders: com.example.medreminder.DoseReminderManager,
+    private val measurementRepository: com.example.medreminder.domain.repository.MeasurementRepository
 ) : ViewModel() {
 
     private val alarmScheduler = MedicineAlarmScheduler(context)
@@ -29,6 +30,17 @@ class MainViewModel(
 
     init {
         processIntent(MainIntent.LoadMedicines)
+        viewModelScope.launch {
+            try {
+                measurementRepository.observeAll().collect { measurements ->
+                    _state.update { it.copy(measurements = measurements, measurementsLoading = false, measurementsError = null) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(measurementsLoading = false, measurementsError = "Не удалось загрузить измерения.") }
+            }
+        }
         viewModelScope.launch {
             doseRecords.observeAll().collect { doses -> _state.update { it.copy(doses = doses) } }
         }
@@ -65,10 +77,39 @@ class MainViewModel(
         viewModelScope.launch { saveMedicine(medicine) }
     }
 
+    fun clearMeasurementError() { _state.update { it.copy(measurementSaveError = null) } }
+
+    suspend fun saveMeasurement(type: com.example.medreminder.domain.model.MeasurementType,
+        first: String, second: String, pulse: String): Boolean {
+        if (_state.value.isSavingMeasurement) return false
+        val measurement = com.example.medreminder.domain.model.parseMeasurement(
+            type, first, second, pulse, System.currentTimeMillis())
+        if (measurement == null) {
+            _state.update { it.copy(measurementSaveError = "Проверьте значения измерения.") }
+            return false
+        }
+        _state.update { it.copy(isSavingMeasurement = true, measurementSaveError = null) }
+        return try {
+            measurementRepository.add(measurement)
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update { it.copy(measurementSaveError = "Не удалось сохранить измерение. Попробуйте ещё раз.") }
+            false
+        } finally {
+            _state.update { it.copy(isSavingMeasurement = false) }
+        }
+    }
+
     fun clearSaveError() { _state.update { it.copy(saveError = null) } }
 
     suspend fun saveMedicine(medicine: Medicine): Boolean {
         if (_state.value.isSaving) return false
+        if (medicine.id == 0 && medicine.startEpochDay?.let { it < java.time.LocalDate.now().toEpochDay() } == true) {
+            _state.update { it.copy(saveError = "Нельзя создать схему на прошедшую дату. Выберите сегодня или будущую дату.") }
+            return false
+        }
         if (medicine.name.isBlank() || medicine.dosage.isBlank() ||
             medicine.times.isEmpty() || medicine.times.any { it !in 0..1439 } ||
             medicine.weekdaysMask and 127 == 0 ||
@@ -80,7 +121,9 @@ class MainViewModel(
         try {
             val id = repository.addMedicine(medicine)
             try {
-                alarmScheduler.scheduleMedicineAlarm(medicine.copy(id = id.toInt()))
+                val saved = medicine.copy(id = id.toInt())
+                alarmScheduler.scheduleMedicineAlarm(saved)
+                reminders.schedulePastDoses(saved)
             } catch (e: Exception) {
                 _state.update { it.copy(error = "Лекарство сохранено, но не удалось настроить напоминание.") }
                 Log.e("MedReminder", "Не удалось запланировать напоминание", e)

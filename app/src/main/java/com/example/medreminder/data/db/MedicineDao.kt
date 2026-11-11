@@ -35,7 +35,10 @@ interface MedicineDao {
         if (medicine.cabinetOnly && matching.isNotEmpty()) {
             matching.forEach { existing ->
                 updateMedicine(existing.copy(
-                    dosage = if (existing.cabinetOnly) medicine.dosage else existing.dosage,
+                    dosage = if (existing.cabinetOnly) medicine.dosage else
+                        com.example.medreminder.domain.model.doseAfterFormChange(
+                            existing.dosage, existing.form, medicine.form
+                        ),
                     form = medicine.form,
                     quantity = medicine.quantity,
                     expiryEpochDay = medicine.expiryEpochDay,

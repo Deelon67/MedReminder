@@ -1,63 +1,18 @@
 package com.example.medreminder.presentation.screens
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-
-@Composable
-internal fun DiaryScreen(modifier: Modifier, today: LocalDate) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenTitle("Дневник")
-        StaticSegments(listOf("Приём лекарств", "Показатели"))
-        DashboardPanel(Modifier.fillMaxWidth()) {
-            Text("—", fontSize = 34.sp, fontWeight = FontWeight.Bold)
-            Text("соблюдение за 30 дней", color = Muted, fontSize = 13.sp, lineHeight = 16.sp)
-            Canvas(Modifier.fillMaxWidth().height(96.dp).padding(top = 14.dp)) {
-                drawLine(Outline.copy(alpha = .4f), Offset.Zero, Offset(size.width, 0f))
-                drawLine(Outline, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx())
-            }
-            val formatter = DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru"))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(today.minusDays(29).format(formatter), color = Muted, fontSize = 11.sp)
-                Text(today.format(formatter), color = Muted, fontSize = 11.sp)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DashboardPanel(Modifier.weight(1f)) {
-                Text("0", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text("дней подряд без пропусков", color = Muted, fontSize = 13.sp, lineHeight = 16.sp)
-            }
-            DashboardPanel(Modifier.weight(1f)) {
-                Text("—", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Text("пропусков нет", color = Muted, fontSize = 13.sp, lineHeight = 16.sp)
-            }
-        }
-        Surface(color = Accent, shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth()) {
-            Row(Modifier.padding(17.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Share, null, tint = Background, modifier = Modifier.size(19.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Отчёт для врача (PDF)", color = Background, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-        }
-    }
-}
 
 @Composable
 internal fun ProfileScreen(modifier: Modifier, medicineCount: Int, onRepeatSettingsChange: (Boolean, Int) -> Unit) {

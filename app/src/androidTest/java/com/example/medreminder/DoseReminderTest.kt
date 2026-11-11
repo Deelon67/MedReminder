@@ -68,7 +68,11 @@ class DoseReminderTest {
             manager.show(id, day, 0)
             val notifications = context.getSystemService(NotificationManager::class.java)
             val notification = notifications.activeNotifications.single { it.tag == "dose/$id/$day/0" }.notification
-            assertEquals(listOf("Принято", "Через 15 мин", "Через 30 мин"),
+            assertEquals("Тест уведомления — 2 капсулы",
+                notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString())
+            assertTrue(notification.extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT)
+                .toString().startsWith("Тест уведомления — 2 капсулы."))
+            assertEquals(listOf("Принято", "15 мин.", "30 мин."),
                 notification.actions.map { it.title.toString() })
             assertEquals(3, notification.actions.map { it.actionIntent }.distinct().size)
             manager.take(id, day, 0)

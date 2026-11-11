@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">MedReminder</string>
+    <string name="app_name">Мои лекарства</string>
+    <string name="snooze_confirmation">Напомним через %1$d мин. Будьте здоровы!</string>
+    <string name="taken_confirmation">Лекарство принято. Будьте здоровы!</string>
 </resources>

@@ -69,7 +69,8 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
     val days = course.toIntOrNull()
     val valid = name.isNotBlank() && dosage.isNotBlank() && doseUnit.isNotBlank() &&
         (dosage.toLongOrNull()?.let { it > 0 } == true) && days != null &&
-        days in 1..365 && weekdays != 0 && times.isNotEmpty()
+        days in 1..365 && weekdays != 0 && times.isNotEmpty() &&
+        start >= LocalDate.now().toEpochDay()
     LaunchedEffect(Unit) { viewModel.clearSaveError() }
 
     MaterialTheme(colorScheme = DashboardColors) {
@@ -205,15 +206,23 @@ fun AddMedicineScreen(viewModel: MainViewModel, onBackClick: () -> Unit, initial
                         }
                         OutlinedButton(
                             onClick = {
-                                val date = LocalDate.ofEpochDay(start)
+                                val today = LocalDate.now()
+                                val date = LocalDate.ofEpochDay(maxOf(start, today.toEpochDay()))
                                 DatePickerDialog(context, { _, y, m, d ->
-                                    start = LocalDate.of(y, m + 1, d).toEpochDay()
-                                }, date.year, date.monthValue - 1, date.dayOfMonth).show()
+                                    start = maxOf(LocalDate.of(y, m + 1, d).toEpochDay(), LocalDate.now().toEpochDay())
+                                }, date.year, date.monthValue - 1, date.dayOfMonth).apply {
+                                    datePicker.minDate = today.atStartOfDay(java.time.ZoneId.systemDefault())
+                                        .toInstant().toEpochMilli()
+                                }.show()
                             }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving
                         ) {
                             Icon(Icons.Default.DateRange, null, Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Начало: " + LocalDate.ofEpochDay(start).format(DateTimeFormatter.ofPattern("dd.MM.yyyy")))
+                        }
+                        if (start < LocalDate.now().toEpochDay()) {
+                            Text("Выберите сегодня или будущую дату начала.",
+                                color = MaterialTheme.colorScheme.error)
                         }
                         Text("Дни приёма", fontWeight = FontWeight.Bold)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), maxItemsInEachRow = 4) {

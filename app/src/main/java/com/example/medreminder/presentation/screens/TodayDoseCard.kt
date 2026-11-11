@@ -60,13 +60,16 @@ internal fun TodayDoseCard(
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(medicine.name, style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(medicine.name, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold, color = Ink)
+                    Text(formatDoseForDisplay(medicine.dosage, medicine.form),
+                        style = MaterialTheme.typography.bodyMedium, color = Muted)
+                }
                 IconButton(onClick = onHide) {
                     Icon(Icons.Default.Delete, "Убрать приёмы на этот день", tint = Muted)
                 }
             }
-            Text("На один приём: ${medicine.dosage}", style = MaterialTheme.typography.bodyMedium, color = Muted)
             if (medicine.comment.isNotBlank()) Text(medicine.comment, style = MaterialTheme.typography.bodySmall, color = Muted)
 
             times.forEachIndexed { index, minutes ->
@@ -100,7 +103,8 @@ internal fun TodayDoseCard(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            color = doseBackground(visualState, neutral)
+                            color = if (visualState == DoseVisualState.UPCOMING) Color(0xFFEEF0F2)
+                                else doseBackground(visualState, neutral)
                         ) {
                             Row(
                                 Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -115,7 +119,12 @@ internal fun TodayDoseCard(
                                     DoseVisualState.MISSED -> Icons.Default.Warning
                                     DoseVisualState.UPCOMING -> null
                                 }
-                                icon?.let { Icon(it, null, Modifier.size(16.dp), tint = statusColor) }
+                                if (icon != null) {
+                                    Icon(icon, null, Modifier.size(16.dp), tint = statusColor)
+                                } else {
+                                    Icon(androidx.compose.ui.res.painterResource(com.example.medreminder.R.drawable.ic_schedule),
+                                        null, Modifier.size(16.dp), tint = statusColor)
+                                }
                                 Text(label, style = MaterialTheme.typography.bodySmall,
                                     color = statusColor, modifier = Modifier.weight(1f))
                             }
@@ -150,7 +159,7 @@ private fun doseForeground(state: DoseVisualState): Color = when (state) {
     DoseVisualState.TAKEN -> Color(0xFF285C3A)
     DoseVisualState.WAITING -> Color(0xFF795A13)
     DoseVisualState.MISSED -> Color(0xFF9C3634)
-    DoseVisualState.UPCOMING -> Muted
+    DoseVisualState.UPCOMING -> Color(0xFF687078)
 }
 
 @Composable
